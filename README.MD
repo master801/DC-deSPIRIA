@@ -2,8 +2,6 @@
 
 ![](https://cdn.mobygames.com/covers/4193936-despiria-dreamcast-front-cover.jpg)
 
----
-
 ## evt.py
 
 ### Usage
@@ -20,8 +18,6 @@ python evt.py --dump --input=EVT --output=TXT
 
 ## Built with:
  - [PyCharm](https://www.jetbrains.com/pycharm/) 2023.1.1 (Community Edition)
-
----
 
 ## Thanks to:
  - [MobyGames](https://www.mobygames.com/game/15330/despiria/) for the cover art

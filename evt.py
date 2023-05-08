@@ -6,8 +6,212 @@ import os
 import io
 import struct
 import glob
+import csv
 
 MAGIC: bytes = b'SC01'
+
+
+def insert_text(csv_file: str, evt_file: str, out_dir: str):
+    print(f'Reading CSV \"{csv_file}\"...')
+    csv_lines: list = []
+    with open(csv_file, mode='rt+', encoding='utf-8', newline='') as io_csv:
+        reader = csv.reader(io_csv, quotechar='\"', quoting=csv.QUOTE_NONNUMERIC)
+        for line in reader:
+            csv_lines.append(line)
+            continue
+        del line
+        csv_lines.pop(0)  # pop first entry - header
+        del reader  # we don't need the csv reader anymore
+        pass
+    print(f'Read {len(csv_lines)-1} lines')
+    print('Done reading CSV file')
+
+    with open(evt_file, mode='rb+') as io_evt:
+        if io_evt.read(0x04) != MAGIC:
+            print(f'File \"{evt_file}\" is not an \"EVT\" script file!')
+            return
+        else:
+            print('Passed magic')
+
+            io_evt.seek(0, io.SEEK_SET)  # reset
+            bytes_evt = io.BytesIO(io_evt.read())
+            pass
+        pass
+    del io_evt
+
+    eof: int = bytes_evt.seek(0x00, io.SEEK_END)
+
+    bytes_evt.seek(0x14, io.SEEK_SET)  # 0x14 is text section pointer
+    text_start_address = struct.unpack('<I', bytes_evt.read(0x04))[0]
+
+    bytes_evt.seek(text_start_address, io.SEEK_SET)
+
+    for i in range(len(csv_lines)):
+        csv_line: list[str, str] = csv_lines[i]
+        if len(csv_line[1]) == 0:  # No Eng, use Jap
+            line = csv_line[0].encode(encoding='shift-jis')
+            pass
+        else:  # Eng
+            line = csv_line[1].encode(encoding='shift-jis')  # TODO Use other encoding
+            pass
+
+        write_buffer: bytearray = bytearray(line)
+        while b'<' in write_buffer:
+            i = write_buffer.index(b'<')
+            j = write_buffer.index(b'>')
+            control_codes = write_buffer[i+1:j].decode(encoding='ascii').split(' ')
+
+            build: bytearray = bytearray()
+            if control_codes[0] == 'NEWLINE':
+                build += b'\xFF\x00'
+                pass
+            elif control_codes[0] == 'PAUSE':
+                build += b'\xFF\x12'
+                pass
+            elif control_codes[0] == 'COLOR':
+                build += b'\xFF\x15'
+                if control_codes[1] == '01':  # 0x01
+                    build += b'\x01'
+                    pass
+                elif control_codes[1] == 'GREEN':  # 0x11
+                    build += b'\x11'
+                    pass
+                elif control_codes[1] == '21':  # 0x21
+                    build += b'\x21'
+                    pass
+                elif control_codes[1] == '31':  # 0x31
+                    build += b'\x31'
+                    pass
+                elif control_codes[1] == '41':  # 0x41
+                    build += b'\x41'
+                    pass
+                elif control_codes[1] == '51':  # 0x51
+                    build += b'\x51'
+                    pass
+                elif control_codes[1] == '61':  # 0x61
+                    build += b'\x61'
+                    pass
+                elif control_codes[1] == '71':  # 0x71
+                    build += b'\x71'
+                    pass
+                elif control_codes[1] == '81':  # 0x81
+                    build += b'\x81'
+                    pass
+                elif control_codes[1] == '91':  # 0x91
+                    build += b'\x91'
+                    pass
+                else:
+                    raise NotImplementedError()
+
+                if control_codes[2] == '00':  # 0x00
+                    build += b'\x00'
+                    pass
+                elif control_codes[2] == '01':  # 0x01
+                    build += b'\x01'
+                    pass
+                elif control_codes[2] == '02':  # 0x02
+                    build += b'\x02'
+                    pass
+                elif control_codes[2] == '03':  # 0x03
+                    build += b'\x03'
+                    pass
+                elif control_codes[2] == '04':  # 0x04
+                    build += b'\x04'
+                    pass
+                elif control_codes[2] == '05':  # 0x05
+                    build += b'\x05'
+                    pass
+                elif control_codes[2] == '06':  # 0x06
+                    build += b'\x06'
+                    pass
+                else:
+                    raise NotImplementedError()
+                pass
+            elif control_codes[0] == 'UNCOLOR':
+                build += b'\xFF\x16'
+                pass
+            elif control_codes[0] == 'RAW':
+                if control_codes[1] == '01':
+                    build += b'\xFF\x01'
+                    build += bytearray.fromhex(control_codes[2])
+                    build += bytearray.fromhex(control_codes[3])
+                    pass
+                elif control_codes[1] == '02':
+                    build += b'\xFF\x02'
+                    build += bytearray.fromhex(control_codes[2])
+                    build += bytearray.fromhex(control_codes[3])
+                    build += bytearray.fromhex(control_codes[4])
+                    build += bytearray.fromhex(control_codes[5])
+                    pass
+                elif control_codes[1] == '04':
+                    build += b'\xFF\x04'
+                    pass
+                elif control_codes[1] == '14':
+                    build += b'\xFF\x14'
+                    build += bytearray.fromhex(control_codes[2])
+                    build += bytearray.fromhex(control_codes[3])
+                    pass
+                else:
+                    raise NotImplementedError()
+                pass
+            else:
+                raise NotImplementedError()
+            write_buffer[i:j+1] = build
+            continue
+
+        bytes_evt.write(write_buffer)
+        bytes_evt.write(b'\x00\x00')
+        continue
+
+    # while bytes_evt.tell() != eof:
+    #     bytes_evt.write(b'\x00')  # zero everything out after writing modified text lines
+    #     continue
+
+    if os.path.sep in evt_file:
+        fn = evt_file[evt_file.rindex(os.path.sep)+1:]
+        pass
+    else:
+        fn = evt_file
+        pass
+    fp = os.path.join(out_dir, fn)
+    if os.path.exists(fp):
+        mode_evt = 'w+'
+        pass
+    else:
+        mode_evt = 'x'
+        pass
+    with open(fp, mode=f'{mode_evt}b') as io_evt:
+        bytes_evt.seek(0x00, io.SEEK_SET)
+        io_evt.write(
+            bytes_evt.read()
+        )
+        pass
+    del io_evt
+    return
+
+
+def insert(csv_dir: str, evt_dir: str, out_dir: str):
+    evt_files: list[str] = []
+    for i in glob.glob1(evt_dir, '*.EVT'):
+        evt_files.append(os.path.join(evt_dir, i))
+        continue
+
+    csv_files: list[str] = []
+    for i in glob.glob1(csv_dir, '*.EVT.CSV'):
+        csv_files.append(os.path.join(csv_dir, i))
+        continue
+
+    if len(evt_files) != len(csv_files):
+        print('Inconsistent list for EVT and CSV!')
+        print(f'EVT: {len(evt_files)}, CSV: {len(csv_files)}')
+        return
+
+    for i in range(len(evt_files)):
+        print(f'Inserting text into EVT file \"{evt_files[i]}\"...')
+        insert_text(csv_files[i], evt_files[i], out_dir)
+        print(f'Done inserting text into EVT file\n')
+        continue
+    return
 
 
 def dump_text(root_dir: str, fn: str, output_dir: str):
@@ -17,7 +221,7 @@ def dump_text(root_dir: str, fn: str, output_dir: str):
     dumped: list = []
     with open(fp, mode='rb+') as io_evt:
         if io_evt.read(0x04) != MAGIC:
-            print('Not an \"EVT\" script file!')
+            print(f'File \"{fp}\" is not an \"EVT\" script file!')
             return
         else:
             print('Passed magic')
@@ -47,13 +251,13 @@ def dump_text(root_dir: str, fn: str, output_dir: str):
                 continue
             buf: bytes = bytes(buf)  # make read-only
 
-            print(f'Found line at 0x{io_evt.tell() - len(buf) - 2:06X}')
+            print(f'Found line at 0x{(io_evt.tell() - len(buf) - 2):06X}')
 
             write_buffer: bytearray = bytearray(buf)
             while b'\xFF' in write_buffer:
                 i = write_buffer.index(0xFF)
-                control_code_build = []
                 eat = 1
+                control_code_build = []
                 if write_buffer[i+1] == 0x00:  # FF 00
                     control_code_build.append('NEWLINE')
                     eat += 1
@@ -179,8 +383,8 @@ def dump_text(root_dir: str, fn: str, output_dir: str):
                 write_buffer[i:i+eat] = built.encode(encoding='ascii')
 
                 del built
-                del eat
                 del control_code_build
+                del eat
                 del i
                 continue
 
@@ -190,10 +394,13 @@ def dump_text(root_dir: str, fn: str, output_dir: str):
             print(f'Decoded line as \"{decoded}\"\n')
 
             del write_buffer
+            del buf
             continue
+
+        del eof
         pass
 
-    fp_dumped = os.path.join(output_dir, fn + '.TXT')
+    fp_dumped = os.path.join(output_dir, fn + '.CSV')
     if os.path.exists(fp_dumped):
         dumped_mode = 'w+'
         pass
@@ -202,31 +409,48 @@ def dump_text(root_dir: str, fn: str, output_dir: str):
         pass
 
     print(f'Writing text file \"{fp_dumped}\"...')
-    with open(fp_dumped, mode=f'{dumped_mode}t', encoding='utf-8', newline='\n') as io_dumped:
+    with open(fp_dumped, mode=f'{dumped_mode}t', encoding='utf-8', newline='') as io_dumped:
+        writer = csv.writer(io_dumped, quotechar='\"', quoting=csv.QUOTE_NONNUMERIC)
+        writer.writerow(['jap', 'eng'])
         for i in dumped:
-            io_dumped.write(i)
-            io_dumped.write('\n')
+            writer.writerow([i, ''])
             continue
         pass
     print('Done!\n\n')
+
+    del dumped_mode
+    del fp_dumped
     return
 
 
 def dump(_input: str, output_dir: str):
     for i in glob.glob('*.EVT', root_dir=_input, recursive=False):
-        dump_text('EVT', i, output_dir)
+        dump_text(_input, i, output_dir)
         continue
     return
 
 
 def main():
-    argparser = argparse.ArgumentParser()
-    argparser.add_argument('--dump', action='store_true')
-    argparser.add_argument('--input', required=True, type=str)
-    argparser.add_argument('--output', required=True, type=str)
-    args = argparser.parse_args()
-    if args.dump:
-        dump(args.input, args.output)
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('--dump', action='store_true')
+    arg_parser.add_argument('--insert', action='store_true')
+    arg_parser.add_argument('--evt', required=True, type=str)
+    arg_parser.add_argument('--csv', required=True, type=str)
+    arg_parser.add_argument('--out', required=False, type=str)
+    args = arg_parser.parse_args()
+    if args.dump and args.insert:
+        print('Cannot dump and insert at the same time!')
+        return
+    elif args.dump:
+        dump(args.evt, args.csv)
+        pass
+    elif args.insert:
+        if args.out:
+            insert(args.csv, args.evt, args.out)
+            pass
+        else:
+            print('No output specified!')
+            return
         pass
     else:
         print('No action specified!')
